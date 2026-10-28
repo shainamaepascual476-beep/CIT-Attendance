@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CIT Student & Attendance System</title>
+    <!-- QR Code Generator Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background: #fef2f2; color: #1f2937; padding: 20px; }
+        .container { max-width: 950px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(185, 28, 28, 0.15); border-top: 6px solid #b91c1c; }
+        
+        header { text-align: center; margin-bottom: 25px; }
+        header h1 { color: #991b1b; font-size: 26px; font-weight: 700; margin-bottom: 5px; }
+        header p { color: #6b7280; font-size: 14px; }
+
+        .nav { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 2px solid #fee2e2; padding-bottom: 12px; }
+        .nav button { flex: 1; padding: 12px; border: none; background: #fee2e2; color: #991b1b; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 15px; transition: all 0.2s; }
+        .nav button.active { background: #b91c1c; color: #ffffff; box-shadow: 0 2px 8px rgba(185, 28, 28, 0.3); }
+
+        .section { display: none; }
+        .section.active { display: block; }
+
+        .card { background: #fff5f5; border: 1px solid #fecaca; border-radius: 8px; padding: 20px; margin-top: 15px; }
+        h2, h3 { color: #991b1b; margin-bottom: 12px; font-size: 20px; border-bottom: 2px solid #fecaca; padding-bottom: 8px; }
+
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; font-weight: 600; color: #7f1d1d; }
+        input, select { width: 100%; padding: 12px; border: 1px solid #fca5a5; border-radius: 6px; font-size: 15px; outline: none; transition: border 0.2s; }
+        input:focus { border-color: #b91c1c; box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.2); }
+
+        .btn { padding: 12px 20px; background: #b91c1c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; font-size: 16px; transition: background 0.2s; }
+        .btn:hover { background: #991b1b; }
+        .btn-secondary { background: #4b5563; margin-top: 10px; }
+        .btn-secondary:hover { background: #374151; }
+        .btn-print { background: #15803d; margin-top: 10px; }
+        .btn-print:hover { background: #166534; }
+        .btn-small { padding: 6px 12px; font-size: 13px; width: auto; display: inline-block; }
+
+        .qr-box { text-align: center; margin: 20px 0; padding: 15px; background: #fff; border: 2px dashed #b91c1c; border-radius: 8px; display: inline-block; }
+        #qrcode img { margin: 0 auto; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #fecaca; padding: 10px; text-align: left; font-size: 14px; }
+        th { background: #fee2e2; color: #7f1d1d; }
+        
+        .badge { padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+        .badge-paid { background: #dcfce7; color: #166534; }
+        .badge-unpaid { background: #fee2e2; color: #991b1b; }
+
+        .active-event-banner { background: #fee2e2; border: 1px solid #fca5a5; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: center; font-weight: bold; color: #991b1b; }
+
+        /* Printable Invoice Styles */
+        @media print {
+            body * { visibility: hidden; }
+            #printable-receipt, #printable-receipt * { visibility: visible; }
+            #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; padding: 20px; background: #fff; color: #000; border: none; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header class="no-print">
+        <h1>College of Industrial Technology Portal</h1>
+        <p>Nueva Vizcaya State University - Bambang Campus</p>
+    </header>
+
+    <div class="active-event-banner no-print">
+        Current Active Event: <span id="banner-event-title">CIT General Assembly</span>
+    </div>
+    
+    <div class="nav no-print">
+        <button id="tab-student" class="active" onclick="switchTab('student')">Student Portal</button>
+        <button id="tab-officer" onclick="switchTab('officer')">Officer Portal</button>
+    </div>
+
+    <!-- STUDENT PORTAL SECTION -->
+    <div id="sec-student" class="section active">
+        <div id="student-login-box">
+            <h2>Student Login</h2>
+            <form onsubmit="handleStudentLogin(event)">
+                <div class="form-group">
+                    <label>Student ID Number</label>
+                    <input type="text" id="s-idnumber" placeholder="Enter Student ID" required>
+                </div>
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" id="s-fullname" placeholder="Enter Full Name" required>
+                </div>
+                <div class="form-group">
+                    <label>Department</label>
+                    <select id="s-course" required>
+                        <option value="">Select Department</option>
+                        <option value="BSHM">BSHM</option>
+                        <option value="BINDTECH">BINDTECH</option>
+                        <option value="INTE/CS">INTE/CS</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Year Level</label>
+                    <select id="s-year" required>
+                        <option value="">Select Year</option>
+                        <option value="1st Year">1st Year</option>
+                        <option value="2nd Year">2nd Year</option>
+                        <option value="3rd Year">3rd Year</option>
+                        <option value="4th Year">4th Year</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn">Login & Generate Attendance QR</button>
+            </form>
+        </div>
+
+        <div id="student-dashboard" style="display:none;">
+            <h2>Student Profile Dashboard</h2>
+            
+            <div style="text-align: center;">
+                <div class="qr-box">
+                    <div id="qrcode"></div>
+                    <p style="margin-top: 10px; font-weight: bold; color: #991b1b;">Your Official Attendance QR Code</p>
+                    <small style="color:#6b7280;">Present this QR code for signing / event attendance</small>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>Student Information</h3>
+                <table>
+                    <tr>
+                        <th>Student ID</th>
+                        <td id="disp-idnumber"></td>
+                    </tr>
+                    <tr>
+                        <th>Full Name</th>
+                        <td id="disp-fullname"></td>
+                    </tr>
+                    <tr>
+                        <th>Department</th>
+                        <td id="disp-course"></td>
+                    </tr>
+                    <tr>
+                        <th>Year Level</th>
+                        <td id="disp-year"></td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="card" style="margin-top: 15px;">
+                <h3>Financial & Attendance Status</h3>
+                <table>
+                    <tr>
+                        <th>Membership Fee (₱200.00 / Semester)</th>
+                        <td id="disp-membership"><span class="badge badge-unpaid">Unpaid (₱200.00 Due)</span></td>
+                    </tr>
+                    <tr>
+                        <th>Attendance Fines (₱25.00 / signing)</th>
+                        <td id="disp-fines" style="color:#b91c1c; font-weight:bold;">₱0.00</td>
+                    </tr>
+                    <tr>
+                        <th>Attendance Status</th>
+                        <td>
+                            <span class="badge badge-paid">Present: <span id="disp-present">0</span></span>
+                            <span class="badge badge-unpaid" style="margin-left:5px;">Absent/Missed: <span id="disp-absent">0</span></span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <button class="btn btn-secondary" onclick="logoutStudent()">Logout Student</button>
+        </div>
+    </div>
+
+    <!-- OFFICER PORTAL SECTION -->
+    <div id="sec-officer" class="section">
+        <div id="officer-login-box">
+            <h2>Officer Login</h2>
+            <form onsubmit="handleOfficerLogin(event)">
+                <div class="form-group">
+                    <label>Officer Access Code</label>
+                    <input type="password" id="officer-code" placeholder="Enter access code" required>
+                </div>
+                <button type="submit" class="btn">Login to Officer Dashboard</button>
+            </form>
+        </div>
+
+        <div id="officer-dashboard" style="display:none;">
+            <h2>Officer Dashboard</h2>
+            <p style="margin-bottom: 15px;">Logged in Officer: <strong style="color:#b91c1c;">Authorized Officer</strong></p>
+
+            <div class="card">
+                <h3>Manage Event Title for Signing</h3>
+                <div class="form-group" style="margin-top:10px;">
+                    <label>Current Event Title / Activity</label>
+                    <input type="text" id="input-event-title" value="CIT General Assembly">
+                </div>
+                <button class="btn btn-small" onclick="updateEventTitle()">Update Active Event Title</button>
+            </div>
+
+            <div class="card" style="margin-top:20px;">
+                <h3>Inspect Individual Student Account</h3>
+                <div style="display:flex; gap:10px;">
+                    <input type="text" id="search-student-query" placeholder="Enter Student ID or Full Name">
+                    <button class="btn btn-small" onclick="searchStudentAsOfficer()">Inspect Student</button>
+                </div>
+            </div>
+
+            <div id="officer-student-details" class="card" style="display:none; margin-top:20px;">
+                <h3>Individual Record for <span id="off-disp-name"></span> (<span id="off-disp-id"></span>)</h3>
+                <p><strong>Department & Year:</strong> <span id="off-disp-courseyear"></span></p>
+                
+                <table>
+                    <tr>
+                        <th>Membership Fee Status (₱200/sem)</th>
+                        <td>
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                                <span id="off-disp-membership-status" class="badge badge-unpaid">Unpaid</span>
+                                <div>
+                                    <input type="number" id="input-pay-membership" placeholder="Amount" style="width: 90px; padding: 6px; display:inline-block;" min="0" max="200">
+                                    <button class="btn btn-small" onclick="recordMembershipPayment()">Set Payment</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Attendance Fines (₱25 / missed signing)</th>
+                        <td>
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                                <span id="off-disp-fines-status" style="color:#b91c1c; font-weight:bold;">₱50.00 Unpaid</span>
+                                <div>
+                                    <input type="number" id="input-pay-fines" placeholder="Amount" style="width: 90px; padding: 6px; display:inline-block;" min="0">
+                                    <button class="btn btn-small" onclick="recordFinesPayment()">Set Fine Payment</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Total Balance Due</th>
+                        <td id="off-disp-total" style="color:#b91c1c; font-size:16px; font-weight:bold;">₱250.00</td>
+                    </tr>
+                </table>
+
+                <button class="btn btn-print" onclick="printStudentBilling()">Print Statement of Account & Fines</button>
+            </div>
+
+            <button class="btn btn-secondary" onclick="logoutOfficer()" style="margin-top:20px;">Logout Officer</button>
+        </div>
+    </div>
+</div>
+
+<!-- HIDDEN PRINTABLE STATEMENT -->
+<div id="printable-receipt" style="display:none;">
+    <h2 style="text-align:center; color:#991b1b; border-bottom:2px solid #000; padding-bottom:5px;">CIT STATEMENT OF FEES & FINES</h2>
+    <p style="text-align:center; margin-bottom:20px;">Nueva Vizcaya State University - Bambang Campus</p>
+    
+    <p><strong>Date:</strong> <span id="p-date"></span></p>
+    <p><strong>Student ID:</strong> <span id="p-id"></span></p>
+    <p><strong>Student Name:</strong> <span id="p-name"></span></p>
+    <p><strong>Department & Year:</strong> <span id="p-courseyear"></span></p>
+    <hr style="margin: 15px 0;">
+
+    <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+        <thead>
+            <tr>
+                <th style="border:1px solid #000; padding:8px;">Description</th>
+                <th style="border:1px solid #000; padding:8px;">Balance Due</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="border:1px solid #000; padding:8px;">Semester Membership Fee (Total: ₱200)</td>
+                <td style="border:1px solid #000; padding:8px;" id="p-membership">₱200.00</td>
+            </tr>
+            <tr>
+                <td style="border:1px solid #000; padding:8px;">Attendance Fines (₱25/missed)</td>
+                <td style="border:1px solid #000; padding:8px;" id="p-fines">₱0.00</td>
+            </tr>
+            <tr>
+                <td style="border:1px solid #000; padding:8px; font-weight:bold;">TOTAL BALANCE DUE</td>
+                <td style="border:1px solid #000; padding:8px; font-weight:bold; color:#b91c1c;" id="p-total">₱200.00</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p style="margin-top:30px;">Issued by: ________________________ (Officer Signature)</p>
+</div>
+
+<script>
+    let currentStudent = null;
+    let activeEventTitle = "CIT General Assembly";
+
+    function switchTab(tab) {
+        document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        
+        document.getElementById('tab-' + tab).classList.add('active');
+        document.getElementById('sec-' + tab).classList.add('active');
+    }
+
+    function updateEventTitle() {
+        const newTitle = document.getElementById('input-event-title').value.trim();
+        if (newTitle) {
+            activeEventTitle = newTitle;
+            document.getElementById('banner-event-title').innerText = activeEventTitle;
+            alert(`Event title updated successfully to: "${activeEventTitle}"`);
+        }
+    }
+
+    // STUDENT LOGIN & QR GENERATION
+    function handleStudentLogin(e) {
+        e.preventDefault();
+        const idnumber = document.getElementById('s-idnumber').value;
+        const fullname = document.getElementById('s-fullname').value;
+        const course = document.getElementById('s-course').value;
+        const year = document.getElementById('s-year').value;
+
+        currentStudent = { 
+            idnumber, 
+            fullname, 
+            course, 
+            year, 
+            membershipPaidAmount: 0, 
+            totalMembershipDue: 200,
+            finesPaidAmount: 0,
+            absentCount: 2, // 2 missed events
+            presentCount: 3 
+        };
+
+        updateStudentDashboardUI();
+
+        // Generate QR Code
+        document.getElementById('qrcode').innerHTML = '';
+        const qrData = JSON.stringify({ id: idnumber, name: fullname, department: course, year: year });
+        new QRCode(document.getElementById("qrcode"), {
+            text: qrData,
+            width: 160,
+            height: 160
+        });
+
+        document.getElementById('student-login-box').style.display = 'none';
+        document.getElementById('student-dashboard').style.display = 'block';
+    }
+
+    function updateStudentDashboardUI() {
+        if (!currentStudent) return;
+        
+        const remainingMembership = Math.max(0, currentStudent.totalMembershipDue - currentStudent.membershipPaidAmount);
+        const totalFines = currentStudent.absentCount * 25;
+        const remainingFines = Math.max(0, totalFines - currentStudent.finesPaidAmount);
+
+        document.getElementById('disp-idnumber').innerText = currentStudent.idnumber;
+        document.getElementById('disp-fullname').innerText = currentStudent.fullname;
+        document.getElementById('disp-course').innerText = currentStudent.course;
+        document.getElementById('disp-year').innerText = currentStudent.year;
+        
+        if (remainingMembership === 0) {
+            document.getElementById('disp-membership').innerHTML = `<span class="badge badge-paid">Fully Paid (₱0.00 Balance)</span>`;
+        } else {
+            document.getElementById('disp-membership').innerHTML = `<span class="badge badge-unpaid">Unpaid Balance: ₱${remainingMembership.toFixed(2)}</span>`;
+        }
+
+        document.getElementById('disp-fines').innerText = `₱${remainingFines.toFixed(2)} (${currentStudent.absentCount} missed)`;
+        document.getElementById('disp-present').innerText = currentStudent.presentCount;
+        document.getElementById('disp-absent').innerText = currentStudent.absentCount;
+    }
+
+    function logoutStudent() {
+        document.getElementById('student-login-box').style.display = 'block';
+        document.getElementById('student-dashboard').style.display = 'none';
+        document.getElementById('qrcode').innerHTML = '';
+    }
+
+    // OFFICER LOGIN
+    function handleOfficerLogin(e) {
+        e.preventDefault();
+        const code = document.getElementById('officer-code').value;
+        if (code === 'officer123') {
+            document.getElementById('officer-login-box').style.display = 'none';
+            document.getElementById('officer-dashboard').style.display = 'block';
+        } else {
+            alert('Invalid Access Code');
+        }
+    }
+
+    // OFFICER INSPECTION
+    function searchStudentAsOfficer() {
+        const query = document.getElementById('search-student-query').value.trim();
+        if (!query) return;
+
+        if (!currentStudent) {
+            // Default sample student if none logged in yet
+            currentStudent = { 
+                idnumber: query, 
+                fullname: "Sample Student", 
+                course: "BSHM", 
+                year: "1st Year", 
+                membershipPaidAmount: 0, 
+                totalMembershipDue: 200,
+                finesPaidAmount: 0,
+                absentCount: 2, 
+                presentCount: 3 
+            };
+        }
+
+        document.getElementById('off-disp-id').innerText = currentStudent.idnumber;
+        document.getElementById('off-disp-name').innerText = currentStudent.fullname;
+        document.getElementById('off-disp-courseyear').innerText = `${currentStudent.course} - ${currentStudent.year}`;
+        
+        updateOfficerDashboardUI();
+        document.getElementById('officer-student-details').style.display = 'block';
+    }
+
+    function recordMembershipPayment() {
+        const val = parseFloat(document.getElementById('input-pay-membership').value) || 0;
+        currentStudent.membershipPaidAmount += val;
+        if (currentStudent.membershipPaidAmount > currentStudent.totalMembershipDue) {
+            currentStudent.membershipPaidAmount = currentStudent.totalMembershipDue;
+        }
+        document.getElementById('input-pay-membership').value = '';
+        updateOfficerDashboardUI();
+        updateStudentDashboardUI();
+    }
+
+    function recordFinesPayment() {
+        const val = parseFloat(document.getElementById('input-pay-fines').value) || 0;
+        currentStudent.finesPaidAmount += val;
+        const totalFines = currentStudent.absentCount * 25;
+        if (currentStudent.finesPaidAmount > totalFines) {
+            currentStudent.finesPaidAmount = totalFines;
+        }
+        document.getElementById('input-pay-fines').value = '';
+        updateOfficerDashboardUI();
+        updateStudentDashboardUI();
+    }
+
+    function updateOfficerDashboardUI() {
+        const remainingMembership = Math.max(0, currentStudent.totalMembershipDue - currentStudent.membershipPaidAmount);
+        const totalFines = currentStudent.absentCount * 25;
+        const remainingFines = Math.max(0, totalFines - currentStudent.finesPaidAmount);
+        const totalBalance = remainingMembership + remainingFines;
+
+        const membershipStatusElem = document.getElementById('off-disp-membership-status');
+        if (remainingMembership === 0) {
+            membershipStatusElem.className = 'badge badge-paid';
+            membershipStatusElem.innerText = 'Fully Paid (₱0.00 Balance)';
+        } else {
+            membershipStatusElem.className = 'badge badge-unpaid';
+            membershipStatusElem.innerText = `Unpaid Balance: ₱${remainingMembership.toFixed(2)} (Paid: ₱${currentStudent.membershipPaidAmount})`;
+        }
+
+        document.getElementById('off-disp-fines-status').innerText = `₱${remainingFines.toFixed(2)} unpaid (Paid: ₱${currentStudent.finesPaidAmount} / Total Fines: ₱${totalFines})`;
+        document.getElementById('off-disp-total').innerText = `₱${totalBalance.toFixed(2)}`;
+
+        // Set Printable Receipt Values
+        document.getElementById('p-date').innerText = new Date().toLocaleDateString();
+        document.getElementById('p-id').innerText = currentStudent.idnumber;
+        document.getElementById('p-name').innerText = currentStudent.fullname;
+        document.getElementById('p-courseyear').innerText = `${currentStudent.course} - ${currentStudent.year}`;
+        document.getElementById('p-membership').innerText = `₱${remainingMembership.toFixed(2)}`;
+        document.getElementById('p-fines').innerText = `₱${remainingFines.toFixed(2)}`;
+        document.getElementById('p-total').innerText = `₱${totalBalance.toFixed(2)}`;
+    }
+
+    function printStudentBilling() {
+        document.getElementById('printable-receipt').style.display = 'block';
+        window.print();
+        document.getElementById('printable-receipt').style.display = 'none';
+    }
+
+    function logoutOfficer() {
+        document.getElementById('officer-login-box').style.display = 'block';
+        document.getElementById('officer-dashboard').style.display = 'none';
+        document.getElementById('officer-code').value = '';
+        document.getElementById('officer-student-details').style.display = 'none';
+    }
+</script>
+
+</body>
+</html>
