@@ -4,11 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CIT Student & Attendance System</title>
-    <!-- QR Code Generator Library -->
+  
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background: #fef2f2; color: #1f2937; padding: 20px; }
+        * {
+        box-sizing: border-box; 
+        margin: 0; padding: 0; 
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+        }
+        
+        body { 
+        background: #fef2f2; 
+        color: #1f2937; 
+        padding: 20px; 
+        }
         .container { max-width: 950px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 4px 20px rgba(185, 28, 28, 0.15); border-top: 6px solid #b91c1c; }
         
         header { text-align: center; margin-bottom: 25px; }
@@ -41,6 +51,8 @@
         .qr-box { text-align: center; margin: 20px 0; padding: 15px; background: #fff; border: 2px dashed #b91c1c; border-radius: 8px; display: inline-block; }
         #qrcode img { margin: 0 auto; }
 
+        #reader { width: 100%; max-width: 400px; margin: 10px auto; border-radius: 8px; overflow: hidden; border: 2px solid #fca5a5; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
         th, td { border: 1px solid #fecaca; padding: 10px; text-align: left; font-size: 14px; }
         th { background: #fee2e2; color: #7f1d1d; }
@@ -50,8 +62,8 @@
         .badge-unpaid { background: #fee2e2; color: #991b1b; }
 
         .active-event-banner { background: #fee2e2; border: 1px solid #fca5a5; padding: 12px; border-radius: 6px; margin-bottom: 20px; text-align: center; font-weight: bold; color: #991b1b; }
+        .scan-result-box { padding: 12px; border-radius: 6px; margin-top: 10px; text-align: center; font-weight: 600; display: none; }
 
-        /* Printable Invoice Styles */
         @media print {
             body * { visibility: hidden; }
             #printable-receipt, #printable-receipt * { visibility: visible; }
@@ -77,7 +89,7 @@
         <button id="tab-officer" onclick="switchTab('officer')">Officer Portal</button>
     </div>
 
-    <!-- STUDENT PORTAL SECTION -->
+   
     <div id="sec-student" class="section active">
         <div id="student-login-box">
             <h2>Student Login</h2>
@@ -120,7 +132,7 @@
                 <div class="qr-box">
                     <div id="qrcode"></div>
                     <p style="margin-top: 10px; font-weight: bold; color: #991b1b;">Your Official Attendance QR Code</p>
-                    <small style="color:#6b7280;">Present this QR code for signing / event attendance</small>
+                    <small style="color:#6b7280;">Present this QR code to the officer to scan for attendance</small>
                 </div>
             </div>
 
@@ -171,7 +183,7 @@
         </div>
     </div>
 
-    <!-- OFFICER PORTAL SECTION -->
+
     <div id="sec-officer" class="section">
         <div id="officer-login-box">
             <h2>Officer Login</h2>
@@ -188,6 +200,7 @@
             <h2>Officer Dashboard</h2>
             <p style="margin-bottom: 15px;">Logged in Officer: <strong style="color:#b91c1c;">Authorized Officer</strong></p>
 
+         
             <div class="card">
                 <h3>Manage Event Title for Signing</h3>
                 <div class="form-group" style="margin-top:10px;">
@@ -197,8 +210,17 @@
                 <button class="btn btn-small" onclick="updateEventTitle()">Update Active Event Title</button>
             </div>
 
+         
             <div class="card" style="margin-top:20px;">
-                <h3>Inspect Individual Student Account</h3>
+                <h3>Officer QR Code Attendance Scanner</h3>
+                <p style="font-size:13px; color:#6b7280; margin-bottom:10px;">Scan student QR codes using your webcam to record attendance for the active event.</p>
+                <div id="reader"></div>
+                <div id="scan-status" class="scan-result-box"></div>
+            </div>
+
+           
+            <div class="card" style="margin-top:20px;">
+                <h3>Inspect Individual Student Account & Payments</h3>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="search-student-query" placeholder="Enter Student ID or Full Name">
                     <button class="btn btn-small" onclick="searchStudentAsOfficer()">Inspect Student</button>
@@ -248,7 +270,7 @@
     </div>
 </div>
 
-<!-- HIDDEN PRINTABLE STATEMENT -->
+
 <div id="printable-receipt" style="display:none;">
     <h2 style="text-align:center; color:#991b1b; border-bottom:2px solid #000; padding-bottom:5px;">CIT STATEMENT OF FEES & FINES</h2>
     <p style="text-align:center; margin-bottom:20px;">Nueva Vizcaya State University - Bambang Campus</p>
@@ -288,6 +310,7 @@
 <script>
     let currentStudent = null;
     let activeEventTitle = "CIT General Assembly";
+    let html5QrcodeScanner = null;
 
     function switchTab(tab) {
         document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
@@ -295,6 +318,11 @@
         
         document.getElementById('tab-' + tab).classList.add('active');
         document.getElementById('sec-' + tab).classList.add('active');
+
+      
+        if (tab !== 'officer' && html5QrcodeScanner) {
+            html5QrcodeScanner.clear().catch(() => {});
+        }
     }
 
     function updateEventTitle() {
@@ -306,7 +334,7 @@
         }
     }
 
-    // STUDENT LOGIN & QR GENERATION
+
     function handleStudentLogin(e) {
         e.preventDefault();
         const idnumber = document.getElementById('s-idnumber').value;
@@ -322,13 +350,12 @@
             membershipPaidAmount: 0, 
             totalMembershipDue: 200,
             finesPaidAmount: 0,
-            absentCount: 2, // 2 missed events
+            absentCount: 2, 
             presentCount: 3 
         };
 
         updateStudentDashboardUI();
 
-        // Generate QR Code
         document.getElementById('qrcode').innerHTML = '';
         const qrData = JSON.stringify({ id: idnumber, name: fullname, department: course, year: year });
         new QRCode(document.getElementById("qrcode"), {
@@ -370,25 +397,49 @@
         document.getElementById('qrcode').innerHTML = '';
     }
 
-    // OFFICER LOGIN
+
     function handleOfficerLogin(e) {
         e.preventDefault();
         const code = document.getElementById('officer-code').value;
         if (code === 'officer123') {
             document.getElementById('officer-login-box').style.display = 'none';
             document.getElementById('officer-dashboard').style.display = 'block';
+            startOfficerScanner();
         } else {
             alert('Invalid Access Code');
         }
     }
 
-    // OFFICER INSPECTION
+
+    function startOfficerScanner() {
+        if (html5QrcodeScanner) return;
+        setTimeout(() => {
+            html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 220 });
+            html5QrcodeScanner.render((decodedText) => {
+                const statusBox = document.getElementById('scan-status');
+                statusBox.style.display = 'block';
+                try {
+                    const studentData = JSON.parse(decodedText);
+                    statusBox.className = 'scan-result-box badge-paid';
+                    statusBox.innerHTML = `Successfully Recorded Attendance for: <strong>${studentData.name}</strong> (${studentData.id}) - Event: ${activeEventTitle}`;
+                    
+                 
+                    document.getElementById('search-student-query').value = studentData.id;
+                    searchStudentAsOfficer();
+                } catch (e) {
+                    statusBox.className = 'scan-result-box badge-unpaid';
+                    statusBox.innerHTML = `Scanned Raw Data: ${decodedText} for Event: ${activeEventTitle}`;
+                }
+            }, (error) => {});
+        }, 300);
+    }
+
+
     function searchStudentAsOfficer() {
         const query = document.getElementById('search-student-query').value.trim();
         if (!query) return;
 
         if (!currentStudent) {
-            // Default sample student if none logged in yet
             currentStudent = { 
                 idnumber: query, 
                 fullname: "Sample Student", 
@@ -451,7 +502,7 @@
         document.getElementById('off-disp-fines-status').innerText = `₱${remainingFines.toFixed(2)} unpaid (Paid: ₱${currentStudent.finesPaidAmount} / Total Fines: ₱${totalFines})`;
         document.getElementById('off-disp-total').innerText = `₱${totalBalance.toFixed(2)}`;
 
-        // Set Printable Receipt Values
+        
         document.getElementById('p-date').innerText = new Date().toLocaleDateString();
         document.getElementById('p-id').innerText = currentStudent.idnumber;
         document.getElementById('p-name').innerText = currentStudent.fullname;
@@ -468,6 +519,10 @@
     }
 
     function logoutOfficer() {
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.clear().catch(() => {});
+            html5QrcodeScanner = null;
+        }
         document.getElementById('officer-login-box').style.display = 'block';
         document.getElementById('officer-dashboard').style.display = 'none';
         document.getElementById('officer-code').value = '';
