@@ -500,21 +500,20 @@
 </div>
 
 <script>
-    // LocalStorage keys
-    const STORAGE_KEY_STUDENTS = "cit_students_db";
-    const STORAGE_KEY_CURRENT_STUDENT = "cit_current_student_id";
-    const STORAGE_KEY_EVENT = "cit_active_event_title";
-    const STORAGE_KEY_OFFICER_LOGGED = "cit_officer_logged";
+    const STORAGE_KEY_STUDENTS = "cit_students_db_v2";
+    const STORAGE_KEY_CURRENT_STUDENT = "cit_current_student_id_v2";
+    const STORAGE_KEY_EVENT = "cit_active_event_title_v2";
 
     let activeEventTitle = localStorage.getItem(STORAGE_KEY_EVENT) || "CIT General Assembly";
     let html5QrcodeScanner = null;
+    let currentStudent = null;
+    let inspectedStudent = null; // Separate officer search target from current logged in student
 
-    // Initialize UI on load
     window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('input-event-title').value = activeEventTitle;
         document.getElementById('banner-event-title').innerText = activeEventTitle;
 
-        // Check if student was logged in
+        // Auto-restore student session if logged in
         const savedStudentId = localStorage.getItem(STORAGE_KEY_CURRENT_STUDENT);
         if (savedStudentId) {
             const students = getAllStudents();
@@ -525,13 +524,6 @@
                 document.getElementById('student-login-box').style.display = 'none';
                 document.getElementById('student-dashboard').style.display = 'block';
             }
-        }
-
-        // Check if officer was logged in
-        if (localStorage.getItem(STORAGE_KEY_OFFICER_LOGGED) === 'true') {
-            document.getElementById('officer-login-box').style.display = 'none';
-            document.getElementById('officer-dashboard').style.display = 'block';
-            startOfficerScanner();
         }
     });
 
@@ -544,14 +536,12 @@
         localStorage.setItem(STORAGE_KEY_STUDENTS, JSON.stringify(students));
     }
 
-    function saveCurrentStudent() {
-        if (!currentStudent) return;
+    function saveStudentData(studentObj) {
+        if (!studentObj || !studentObj.idnumber) return;
         const students = getAllStudents();
-        students[currentStudent.idnumber] = currentStudent;
+        students[studentObj.idnumber] = studentObj;
         saveAllStudents(students);
     }
-
-    let currentStudent = null;
 
     function switchTab(tab) {
         document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
@@ -563,8 +553,15 @@
         if (tab !== 'officer' && html5QrcodeScanner) {
             html5QrcodeScanner.clear().catch(() => {});
             html5QrcodeScanner = null;
-        } else if (tab === 'officer' && localStorage.getItem(STORAGE_KEY_OFFICER_LOGGED) === 'true') {
-            startOfficerScanner();
+        }
+
+        // Always refresh student dashboard when switching to student tab
+        if (tab === 'student' && currentStudent) {
+            const students = getAllStudents();
+            if (students[currentStudent.idnumber]) {
+                currentStudent = students[currentStudent.idnumber];
+            }
+            updateStudentDashboardUI();
         }
     }
 
@@ -586,14 +583,15 @@
         const year = document.getElementById('s-year').value;
 
         const students = getAllStudents();
+
         if (students[idnumber]) {
-            // Existing student, load record and update name/course/year if needed
+            // Existing student in system: pull their saved fees & balances!
             currentStudent = students[idnumber];
             currentStudent.fullname = fullname;
             currentStudent.course = course;
             currentStudent.year = year;
         } else {
-            // New student profile
+            // Create brand new student account
             currentStudent = { 
                 idnumber, 
                 fullname, 
@@ -607,7 +605,7 @@
             };
         }
 
-        saveCurrentStudent();
+        saveStudentData(currentStudent);
         localStorage.setItem(STORAGE_KEY_CURRENT_STUDENT, idnumber);
 
         updateStudentDashboardUI();
@@ -630,9 +628,9 @@
     function updateStudentDashboardUI() {
         if (!currentStudent) return;
         
-        const remainingMembership = Math.max(0, currentStudent.totalMembershipDue - currentStudent.membershipPaidAmount);
-        const totalFines = currentStudent.absentCount * 25;
-        const remainingFines = Math.max(0, totalFines - currentStudent.finesPaidAmount);
+        const remainingMembership = Math.max(0, currentStudent.totalMembershipDue - (currentStudent.membershipPaidAmount || 0));
+        const totalFines = (currentStudent.absentCount || 0) * 25;
+        const remainingFines = Math.max(0, totalFines - (currentStudent.finesPaidAmount || 0));
 
         document.getElementById('disp-idnumber').innerText = currentStudent.idnumber;
         document.getElementById('disp-fullname').innerText = currentStudent.fullname;
@@ -645,9 +643,9 @@
             document.getElementById('disp-membership').innerHTML = `<span class="badge badge-unpaid">Unpaid Balance: ₱${remainingMembership.toFixed(2)}</span>`;
         }
 
-        document.getElementById('disp-fines').innerText = `₱${remainingFines.toFixed(2)} (${currentStudent.absentCount} missed)`;
-        document.getElementById('disp-present').innerText = currentStudent.presentCount;
-        document.getElementById('disp-absent').innerText = currentStudent.absentCount;
+        document.getElementById('disp-fines').innerText = `₱${remainingFines.toFixed(2)} (${currentStudent.absentCount || 0} missed)`;
+        document.getElementById('disp-present').innerText = currentStudent.presentCount || 0;
+        document.getElementById('disp-absent').innerText = currentStudent.absentCount || 0;
     }
 
     function logoutStudent() {
@@ -662,7 +660,6 @@
         e.preventDefault();
         const code = document.getElementById('officer-code').value;
         if (code === 'officer123') {
-            localStorage.setItem(STORAGE_KEY_OFFICER_LOGGED, 'true');
             document.getElementById('officer-login-box').style.display = 'none';
             document.getElementById('officer-dashboard').style.display = 'block';
             startOfficerScanner();
@@ -674,47 +671,17 @@
     function startOfficerScanner() {
         if (html5QrcodeScanner) return;
         setTimeout(() => {
-            const readerElem = document.getElementById("reader");
-            if (!readerElem) return;
             html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 220 });
             html5QrcodeScanner.render((decodedText) => {
                 const statusBox = document.getElementById('scan-status');
                 statusBox.style.display = 'block';
                 try {
                     const studentData = JSON.parse(decodedText);
-                    const students = getAllStudents();
-                    
-                    let targetStudent = students[studentData.id];
-                    if (!targetStudent) {
-                        targetStudent = {
-                            idnumber: studentData.id,
-                            fullname: studentData.name,
-                            course: studentData.department || 'BSHM',
-                            year: studentData.year || '1st Year',
-                            membershipPaidAmount: 0,
-                            totalMembershipDue: 200,
-                            finesPaidAmount: 0,
-                            absentCount: 2,
-                            presentCount: 3
-                        };
-                    }
-
-                    // Record attendance (increment present count)
-                    targetStudent.presentCount = (targetStudent.presentCount || 0) + 1;
-                    students[targetStudent.idnumber] = targetStudent;
-                    saveAllStudents(students);
-
-                    if (currentStudent && currentStudent.idnumber === targetStudent.idnumber) {
-                        currentStudent = targetStudent;
-                        updateStudentDashboardUI();
-                    }
+                    document.getElementById('search-student-query').value = studentData.id;
+                    searchStudentAsOfficer();
 
                     statusBox.className = 'scan-result-box badge-paid';
-                    statusBox.innerHTML = `Successfully Recorded Attendance for: <strong>${targetStudent.fullname}</strong> (${targetStudent.idnumber}) - Event: ${activeEventTitle}`;
-                    
-                    // Automatically load into inspector
-                    document.getElementById('search-student-query').value = targetStudent.idnumber;
-                    searchStudentAsOfficer();
+                    statusBox.innerHTML = `Successfully Loaded Record for: <strong>${studentData.name}</strong> (${studentData.id}) - Event: ${activeEventTitle}`;
                 } catch (e) {
                     statusBox.className = 'scan-result-box badge-unpaid';
                     statusBox.innerHTML = `Scanned Raw Data: ${decodedText} for Event: ${activeEventTitle}`;
@@ -728,75 +695,94 @@
         if (!query) return;
 
         const students = getAllStudents();
+        
+        // Search by exact ID or name substring match
         let found = students[query];
-
-        // Search by name if not found by ID
         if (!found) {
-            found = Object.values(students).find(s => s.fullname.toLowerCase().includes(query.toLowerCase()));
+            found = Object.values(students).find(s => s.fullname.toLowerCase() === query.toLowerCase() || s.idnumber === query);
         }
 
         if (!found) {
-            // Create default if completely new query
+            // Create initial profile if searching a new ID (defaults 2 absent = ₱50 fines, ₱200 membership)
             found = { 
                 idnumber: query, 
-                fullname: "Sample Student", 
-                course: "BSHM", 
-                year: "1st Year", 
+                fullname: "Student Record", 
+                course: "INTE/CS", 
+                year: "3rd Year", 
                 membershipPaidAmount: 0, 
                 totalMembershipDue: 200,
                 finesPaidAmount: 0,
                 absentCount: 2, 
                 presentCount: 3 
             };
-            students[found.idnumber] = found;
-            saveAllStudents(students);
+            saveStudentData(found);
         }
 
-        currentStudent = found;
-        document.getElementById('off-disp-id').innerText = currentStudent.idnumber;
-        document.getElementById('off-disp-name').innerText = currentStudent.fullname;
-        document.getElementById('off-disp-courseyear').innerText = `${currentStudent.course} - ${currentStudent.year}`;
+        inspectedStudent = found;
+
+        document.getElementById('off-disp-id').innerText = inspectedStudent.idnumber;
+        document.getElementById('off-disp-name').innerText = inspectedStudent.fullname;
+        document.getElementById('off-disp-courseyear').innerText = `${inspectedStudent.course} - ${inspectedStudent.year}`;
         
         updateOfficerDashboardUI();
         document.getElementById('officer-student-details').style.display = 'block';
     }
 
     function recordMembershipPayment() {
-        if (!currentStudent) return;
+        if (!inspectedStudent) return;
         const val = parseFloat(document.getElementById('input-pay-membership').value) || 0;
-        currentStudent.membershipPaidAmount += val;
-        if (currentStudent.membershipPaidAmount > currentStudent.totalMembershipDue) {
-            currentStudent.membershipPaidAmount = currentStudent.totalMembershipDue;
+        
+        inspectedStudent.membershipPaidAmount = (inspectedStudent.membershipPaidAmount || 0) + val;
+        if (inspectedStudent.membershipPaidAmount > inspectedStudent.totalMembershipDue) {
+            inspectedStudent.membershipPaidAmount = inspectedStudent.totalMembershipDue;
         }
+
         document.getElementById('input-pay-membership').value = '';
         
-        saveCurrentStudent();
+        // Save persistently to local database
+        saveStudentData(inspectedStudent);
+
+        // Synchronize if student logged in on this browser session
+        if (currentStudent && currentStudent.idnumber === inspectedStudent.idnumber) {
+            currentStudent = inspectedStudent;
+            updateStudentDashboardUI();
+        }
+
         updateOfficerDashboardUI();
-        updateStudentDashboardUI();
-        alert("Membership payment saved successfully!");
+        alert(`Payment of ₱${val.toFixed(2)} recorded for Membership Fee!`);
     }
 
     function recordFinesPayment() {
-        if (!currentStudent) return;
+        if (!inspectedStudent) return;
         const val = parseFloat(document.getElementById('input-pay-fines').value) || 0;
-        currentStudent.finesPaidAmount += val;
-        const totalFines = currentStudent.absentCount * 25;
-        if (currentStudent.finesPaidAmount > totalFines) {
-            currentStudent.finesPaidAmount = totalFines;
-        }
-        document.getElementById('input-pay-fines').value = '';
         
-        saveCurrentStudent();
+        const totalFines = (inspectedStudent.absentCount || 0) * 25;
+        inspectedStudent.finesPaidAmount = (inspectedStudent.finesPaidAmount || 0) + val;
+        if (inspectedStudent.finesPaidAmount > totalFines) {
+            inspectedStudent.finesPaidAmount = totalFines;
+        }
+
+        document.getElementById('input-pay-fines').value = '';
+
+        // Save persistently to local database
+        saveStudentData(inspectedStudent);
+
+        // Synchronize if student logged in on this browser session
+        if (currentStudent && currentStudent.idnumber === inspectedStudent.idnumber) {
+            currentStudent = inspectedStudent;
+            updateStudentDashboardUI();
+        }
+
         updateOfficerDashboardUI();
-        updateStudentDashboardUI();
-        alert("Fine payment saved successfully!");
+        alert(`Payment of ₱${val.toFixed(2)} recorded for Attendance Fines!`);
     }
 
     function updateOfficerDashboardUI() {
-        if (!currentStudent) return;
-        const remainingMembership = Math.max(0, currentStudent.totalMembershipDue - currentStudent.membershipPaidAmount);
-        const totalFines = currentStudent.absentCount * 25;
-        const remainingFines = Math.max(0, totalFines - currentStudent.finesPaidAmount);
+        if (!inspectedStudent) return;
+
+        const remainingMembership = Math.max(0, inspectedStudent.totalMembershipDue - (inspectedStudent.membershipPaidAmount || 0));
+        const totalFines = (inspectedStudent.absentCount || 0) * 25;
+        const remainingFines = Math.max(0, totalFines - (inspectedStudent.finesPaidAmount || 0));
         const totalBalance = remainingMembership + remainingFines;
 
         const membershipStatusElem = document.getElementById('off-disp-membership-status');
@@ -805,16 +791,16 @@
             membershipStatusElem.innerText = 'Fully Paid (₱0.00 Balance)';
         } else {
             membershipStatusElem.className = 'badge badge-unpaid';
-            membershipStatusElem.innerText = `Unpaid Balance: ₱${remainingMembership.toFixed(2)} (Paid: ₱${currentStudent.membershipPaidAmount})`;
+            membershipStatusElem.innerText = `Unpaid Balance: ₱${remainingMembership.toFixed(2)} (Paid: ₱${(inspectedStudent.membershipPaidAmount || 0).toFixed(2)})`;
         }
 
-        document.getElementById('off-disp-fines-status').innerText = `₱${remainingFines.toFixed(2)} unpaid (Paid: ₱${currentStudent.finesPaidAmount} / Total Fines: ₱${totalFines})`;
+        document.getElementById('off-disp-fines-status').innerText = `₱${remainingFines.toFixed(2)} unpaid (Paid: ₱${(inspectedStudent.finesPaidAmount || 0).toFixed(2)} / Total Fines: ₱${totalFines.toFixed(2)})`;
         document.getElementById('off-disp-total').innerText = `₱${totalBalance.toFixed(2)}`;
 
         document.getElementById('p-date').innerText = new Date().toLocaleDateString();
-        document.getElementById('p-id').innerText = currentStudent.idnumber;
-        document.getElementById('p-name').innerText = currentStudent.fullname;
-        document.getElementById('p-courseyear').innerText = `${currentStudent.course} - ${currentStudent.year}`;
+        document.getElementById('p-id').innerText = inspectedStudent.idnumber;
+        document.getElementById('p-name').innerText = inspectedStudent.fullname;
+        document.getElementById('p-courseyear').innerText = `${inspectedStudent.course} - ${inspectedStudent.year}`;
         document.getElementById('p-membership').innerText = `₱${remainingMembership.toFixed(2)}`;
         document.getElementById('p-fines').innerText = `₱${remainingFines.toFixed(2)}`;
         document.getElementById('p-total').innerText = `₱${totalBalance.toFixed(2)}`;
@@ -831,7 +817,7 @@
             html5QrcodeScanner.clear().catch(() => {});
             html5QrcodeScanner = null;
         }
-        localStorage.removeItem(STORAGE_KEY_OFFICER_LOGGED);
+        inspectedStudent = null;
         document.getElementById('officer-login-box').style.display = 'block';
         document.getElementById('officer-dashboard').style.display = 'none';
         document.getElementById('officer-code').value = '';
